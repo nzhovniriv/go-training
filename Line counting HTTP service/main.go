@@ -3,45 +3,47 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 type Book struct {
 	Title string `json:"title"`
-	Lines int32  `json:"lines,string"`
+	Lines int    `json:"lines,string"`
 }
 
 func main() {
-	url := "http://127.0.0.1:3999/books/"
-	var count int32
-	flag.Parse()
-	title := flag.Arg(0)
-	if len(title) == 0 {
-		fmt.Println("Please pass a book name as an argument via the command line")
-	} else {
-		response, err := http.Get(url + title)
+	http.HandleFunc("/", handler)
+	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	var count int
+	urlPart := strings.Split(r.URL.Path, "/")
+	bookName := urlPart[len(urlPart)-1]
+	if len(urlPart) <= 2 || len(bookName) == 0 {
+		fmt.Fprint(w, "Please pass all necessary information into URL.")
+	} else if len(urlPart) == 3 && len(bookName) != 0 {
+		file, err := os.Open(urlPart[len(urlPart)-2] + string(filepath.Separator) + bookName)
 		if err != nil {
 			log.Fatal(err)
 		}
-		reader := bufio.NewReader(response.Body)
-		for {
-			_, err := reader.ReadBytes('\n')
-			if err == io.EOF {
-				break
-			} else {
-				count++
-			}
+		input := bufio.NewScanner(file)
+		for input.Scan() {
+			count++
 		}
-		response.Body.Close()
-		book := Book{title, count}
+		file.Close()
+		book := Book{bookName, count}
 		data, err := json.Marshal(book)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%s", data)
+		w.Write(data)
+	} else {
+		fmt.Fprint(w, "You have passed more information into URL.")
 	}
 }
